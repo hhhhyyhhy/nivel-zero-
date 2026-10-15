@@ -1,0 +1,1064 @@
+<title>Nível Zero</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=VT323&family=Courier+Prime:wght@400;700&display=swap">
+<style>
+/* Layout: tela cheia de câmera VHS — canvas 3D por baixo, HUD de filmadora por cima, telas de texto centralizadas. */
+:root {
+  --void: #0b0a06;
+  --paper: #e9dfb4;
+  --mono-yellow: #d8c76a;
+  --rec: #ff3b2f;
+  --dim: #8a8160;
+  --danger: #c2261b;
+  --font-hud: "VT323", "Courier New", monospace;
+  --font-body: "Courier Prime", "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--void);
+  color: var(--paper);
+  font-family: var(--font-body);
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+#game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+
+/* Efeito de fita: linhas, vinheta e ruído */
+.fx { position: fixed; inset: 0; pointer-events: none; }
+.scan { background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0 2px, rgba(0,0,0,.18) 2px 3px); }
+.vig { background: radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.75) 100%); }
+#noise { opacity: .07; mix-blend-mode: screen; width: 100%; height: 100%; }
+#fear { background: radial-gradient(ellipse at center, rgba(120,0,0,0) 30%, rgba(120,0,0,.55) 100%); opacity: 0; transition: opacity .3s; }
+
+/* HUD da filmadora */
+.hud { position: fixed; inset: 0; pointer-events: none; font-family: var(--font-hud); font-size: clamp(18px, 2.6vw, 28px); color: var(--paper); text-shadow: 0 0 6px rgba(233,223,180,.5); letter-spacing: .04em; }
+.hud .tl { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); left: calc(18px + env(safe-area-inset-left, 0px)); }
+.hud .tr { position: absolute; top: calc(14px + env(safe-area-inset-top, 0px)); right: calc(18px + env(safe-area-inset-right, 0px)); text-align: right; }
+.hud .meters { margin-top: 6px; display: grid; gap: 2px; font-size: .8em; }
+.rec { color: var(--rec); }
+.rec i { display: inline-block; width: .55em; height: .55em; border-radius: 50%; background: var(--rec); margin-right: .3em; animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.meter { display: flex; align-items: center; gap: .4em; }
+.meter b { font-weight: 400; width: 4.4em; }
+.bar { width: min(8em, 28vw); height: .5em; border: 1px solid var(--paper); position: relative; }
+.bar span { position: absolute; inset: 1px; right: auto; background: var(--paper); }
+.bar.low span { background: var(--rec); }
+#toast { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); font-size: 1.2em; opacity: 0; transition: opacity .4s; text-align: center; width: 90%; }
+.cross { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px; background: rgba(233,223,180,.5); border-radius: 50%; }
+
+/* Telas */
+.screen { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(11,10,6,.86); padding-block: 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); text-align: center; overflow-y: auto; }
+.screen .box { max-width: 34rem; display: grid; gap: 18px; justify-items: center; }
+.screen h1 { font-family: var(--font-hud); font-weight: 400; font-size: clamp(64px, 16vw, 132px); line-height: .85; margin: 0; color: var(--mono-yellow); text-shadow: 3px 0 rgba(255,0,0,.35), -3px 0 rgba(0,180,255,.25); text-wrap: balance; }
+.screen h2 { font-family: var(--font-hud); font-weight: 400; font-size: clamp(40px, 9vw, 72px); margin: 0; color: var(--mono-yellow); }
+.screen p { margin: 0; line-height: 1.55; color: var(--paper); max-width: 60ch; }
+.screen .small { font-size: 13px; color: var(--dim); }
+.keys { display: grid; grid-template-columns: auto auto; gap: 4px 14px; font-size: 14px; text-align: left; color: var(--dim); }
+.keys kbd { font-family: var(--font-hud); font-size: 20px; color: var(--paper); }
+button.go { font-family: var(--font-hud); font-size: 32px; letter-spacing: .08em; padding: 8px 28px; background: transparent; color: var(--paper); border: 2px solid var(--paper); cursor: pointer; }
+.quality { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; align-items: center; font-family: var(--font-hud); font-size: 20px; color: var(--dim); }
+.quality button { font-family: var(--font-hud); font-size: 20px; padding: 2px 12px; background: transparent; color: var(--dim); border: 1px solid var(--dim); cursor: pointer; }
+.quality button[aria-pressed="true"] { color: var(--void); background: var(--paper); border-color: var(--paper); }
+.quality button:focus-visible { outline: 2px solid var(--paper); outline-offset: 2px; }
+#fps { position: absolute; right: calc(18px + env(safe-area-inset-right, 0px)); top: calc(70px + env(safe-area-inset-top, 0px)); font-size: .7em; color: var(--dim); }
+button.go:hover, button.go:focus-visible { background: var(--paper); color: var(--void); outline: none; }
+
+/* Camada que recebe toque e mouse (Pointer Events funcionam dentro de apps e iframes) */
+#input { position: fixed; inset: 0; touch-action: none; outline: none; }
+
+/* Controles de toque: sempre visíveis no celular */
+.touch { position: fixed; inset: 0; pointer-events: none; }
+#stick { position: absolute; left: calc(28px + env(safe-area-inset-left, 0px)); bottom: calc(28px + env(safe-area-inset-bottom, 0px)); width: 132px; height: 132px; border: 2px solid rgba(233,223,180,.45); border-radius: 50%; background: rgba(11,10,6,.25); }
+#stick i { position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px; border-radius: 50%; background: rgba(233,223,180,.45); }
+#stick.active { border-color: rgba(233,223,180,.8); }
+.tbtn { position: absolute; pointer-events: auto; touch-action: none; width: 76px; height: 76px; border-radius: 50%; border: 2px solid rgba(233,223,180,.55); background: rgba(11,10,6,.35); color: var(--paper); font-family: var(--font-hud); font-size: 17px; letter-spacing: .02em; padding: 0; }
+.tbtn.on { background: rgba(233,223,180,.4); color: var(--void); }
+#bRun { right: calc(24px + env(safe-area-inset-right, 0px)); bottom: calc(36px + env(safe-area-inset-bottom, 0px)); }
+#bLight { right: calc(24px + env(safe-area-inset-right, 0px)); bottom: calc(126px + env(safe-area-inset-bottom, 0px)); }
+.lookhint { position: absolute; right: calc(112px + env(safe-area-inset-right, 0px)); bottom: calc(60px + env(safe-area-inset-bottom, 0px)); font-family: var(--font-hud); font-size: 16px; color: rgba(233,223,180,.55); text-align: right; transition: opacity 1s; }
+@media (prefers-reduced-motion: reduce) { .rec i { animation: none; } }
+</style>
+
+<canvas id="game"></canvas>
+<canvas id="noise" class="fx"></canvas>
+<div class="fx scan"></div>
+<div class="fx vig"></div>
+<div id="fear" class="fx"></div>
+<div id="input" tabindex="-1"></div>
+
+<div class="hud" id="hud" hidden>
+  <div class="tl">
+    <div class="rec"><i></i>REC <span id="clock">00:00:00</span></div>
+    <div class="meters">
+      <div class="meter"><b>SANID.</b><div class="bar" id="sanBar"><span></span></div></div>
+      <div class="meter"><b>FÔLEGO</b><div class="bar" id="staBar"><span></span></div></div>
+      <div class="meter"><b>PILHA</b><div class="bar" id="batBar"><span></span></div></div>
+    </div>
+  </div>
+  <div class="tr">
+    <div id="levelName">NÍVEL 0</div>
+    <div id="bottles"></div>
+  </div>
+  <div class="cross"></div>
+  <div id="fps" hidden></div>
+  <div id="toast"></div>
+</div>
+
+<div class="touch" id="touch" hidden>
+  <div id="stick"><i></i></div>
+  <div class="lookhint" id="lookhint">arraste aqui<br>para olhar</div>
+  <button class="tbtn" id="bLight" type="button">LUZ</button>
+  <button class="tbtn" id="bRun" type="button">CORRER</button>
+</div>
+
+<div class="screen" id="title">
+  <div class="box">
+    <h1>NÍVEL<br>ZERO</h1>
+    <p>Você atravessou a parede errada. Carpete úmido, zumbido de lâmpada, salas amarelas sem fim. Ache a saída para descer mais fundo e não deixe aquilo te alcançar.</p>
+    <div class="keys" id="keysDesk">
+      <kbd>W A S D</kbd><span>andar</span>
+      <kbd>MOUSE</kbd><span>olhar (clique para capturar)</span>
+      <kbd>SHIFT</kbd><span>correr</span>
+      <kbd>F</kbd><span>lanterna</span>
+    </div>
+    <p class="small" id="keysTouch" hidden>Joystick à esquerda para andar. Arraste em qualquer outro lugar para olhar. Botões para lanterna e correr.</p>
+    <p class="small">Garrafas de água de amêndoa recuperam a sanidade. A lanterna gasta pilha. Correr faz barulho. Use fones. Tecla P mostra o FPS.</p>
+    <div class="quality" id="quality" role="group" aria-label="Qualidade gráfica">
+      <span>QUALIDADE</span>
+      <button type="button" data-q="auto">AUTO</button>
+      <button type="button" data-q="low">BAIXA</button>
+      <button type="button" data-q="mid">MÉDIA</button>
+      <button type="button" data-q="high">ALTA</button>
+    </div>
+    <button class="go" id="start" type="button">ENTRAR</button>
+    <button class="go" id="quit" type="button" hidden>SAIR</button>
+    <p class="small" id="best"></p>
+  </div>
+</div>
+
+<div class="screen" id="between" hidden>
+  <div class="box">
+    <h2 id="betweenTitle">NÍVEL 1</h2>
+    <p id="betweenText"></p>
+    <button class="go" id="next" type="button">DESCER</button>
+  </div>
+</div>
+
+<div class="screen" id="dead" hidden>
+  <div class="box">
+    <h2 id="deadTitle">FITA ENCERRADA</h2>
+    <p id="deadText"></p>
+    <button class="go" id="again" type="button">TENTAR DE NOVO</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+
+// ------------------------------------------------------------------ Configuração dos níveis
+const LEVELS = [
+  { name: "NÍVEL 0", sub: "O Saguão", text: "Papel de parede amarelo, carpete encharcado, 600 milhões de metros quadrados de salas vazias.",
+    wall: "#c8b25e", stripe: "#b39d4c", carpet: "#8f7a3c", ceil: "#d9cf9e", fog: 0x2a2512, amb: 0.62, panels: 0.22, broken: 0.12 },
+  { name: "NÍVEL 1", sub: "A Garagem", text: "Concreto, poças e luz que falha. O zumbido aqui é mais grave.",
+    wall: "#7d7a72", stripe: "#6c6962", carpet: "#4a4843", ceil: "#8d8a82", fog: 0x121210, amb: 0.42, panels: 0.14, broken: 0.3 },
+  { name: "NÍVEL 2", sub: "As Tubulações", text: "Corredores estreitos e quentes. Algo bate nos canos ao longe.",
+    wall: "#6e4a3a", stripe: "#5b3c2f", carpet: "#3a2a22", ceil: "#5a4136", fog: 0x150b07, amb: 0.3, panels: 0.1, broken: 0.45 },
+  { name: "NÍVEL 3", sub: "A Usina", text: "Escuridão quase total. Só a sua lanterna e o barulho dos seus passos.",
+    wall: "#3d4a46", stripe: "#33403c", carpet: "#1f2624", ceil: "#2f3835", fog: 0x050807, amb: 0.16, panels: 0.06, broken: 0.6 },
+];
+const level = (n) => {
+  const base = LEVELS[Math.min(n, LEVELS.length - 1)];
+  return n < LEVELS.length ? base : { ...base, name: "NÍVEL " + n, sub: "Mais fundo", text: "Ninguém mapeou este lugar. Os corredores mudam enquanto você não olha." };
+};
+
+const S = 4;          // tamanho da célula (m)
+const H = 3.2;        // altura do teto
+const EYE = 1.6;
+const R = 0.5;        // raio do jogador (mantém a câmera longe da parede)
+
+// ------------------------------------------------------------------ Elementos
+const $ = (id) => document.getElementById(id);
+const canvas = $("game");
+const isTouch = matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints || 0) > 0 || "ontouchstart" in window;
+$("keysDesk").hidden = isTouch;
+$("keysTouch").hidden = !isTouch;
+
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} },
+};
+const showBest = () => {
+  const b = +(store.get("nivel0-best") || 0);
+  $("best").textContent = b > 0 ? "Mais fundo que você já chegou: nível " + b : "";
+};
+showBest();
+
+// ------------------------------------------------------------------ Qualidade gráfica
+// ratio = escala da resolução interna; lights = luzes de lâmpada ativas; noise = intervalo do chuvisco (0 = desligado).
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const QUALITY = {
+  low:  { label: "baixa", ratio: Math.min(DPR, 1) * 0.6, lights: 2, noise: 0, blur: false, fog: 0.8 },
+  mid:  { label: "média", ratio: Math.min(DPR, 1) * 0.85, lights: 3, noise: 0.1, blur: true, fog: 1 },
+  high: { label: "alta", ratio: Math.min(DPR, 1.5), lights: 5, noise: 0.06, blur: true, fog: 1 },
+};
+const ORDER = ["low", "mid", "high"];
+let qualityPref = "auto";
+let quality = "mid";
+const tune = { frames: 0, time: 0, windows: 0, steppedDown: false };
+
+// ------------------------------------------------------------------ Three.js
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: "high-performance" });
+renderer.setPixelRatio(QUALITY.mid.ratio);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, 1, 0.05, 80);
+camera.rotation.order = "YXZ";
+scene.add(camera);
+
+const resize = () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  noise.width = Math.ceil(w / 4); noise.height = Math.ceil(h / 4);
+};
+const noise = $("noise");
+const nctx = noise.getContext("2d");
+window.addEventListener("resize", resize);
+
+// Luzes: ambiente + lanterna + um pequeno grupo de luzes que segue as lâmpadas mais próximas.
+const ambient = new THREE.AmbientLight(0xfff1c0, 0.6);
+scene.add(ambient);
+const flashlight = new THREE.SpotLight(0xfff0cc, 0, 22, 0.5, 0.45, 1.4);
+flashlight.position.set(0, -0.2, 0);
+camera.add(flashlight);
+const flashTarget = new THREE.Object3D();
+flashTarget.position.set(0, -0.3, -5);
+camera.add(flashTarget);
+flashlight.target = flashTarget;
+const lightPool = [];
+for (let i = 0; i < 5; i++) {
+  const l = new THREE.PointLight(0xfff4c8, 0, 11, 1.6);
+  scene.add(l);
+  lightPool.push(l);
+}
+
+function applyQuality(q, announce) {
+  quality = q;
+  const Q = QUALITY[q];
+  renderer.setPixelRatio(Q.ratio);
+  resize();
+  lightPool.forEach((l, i) => { l.visible = i < Q.lights; });
+  noise.hidden = Q.noise === 0;
+  if (!Q.blur) renderer.domElement.style.filter = "";
+  if (world) scene.fog.far = world.fogFar * Q.fog;
+  lightTimer = 0;
+  if (announce) toast("Qualidade " + Q.label + (qualityPref === "auto" ? " (automática)" : ""));
+}
+function setQualityPref(pref) {
+  qualityPref = pref;
+  store.set("nivel0-quality", pref);
+  for (const b of document.querySelectorAll("#quality button")) b.setAttribute("aria-pressed", String(b.dataset.q === pref));
+  Object.assign(tune, { frames: 0, time: 0, windows: 0, steppedDown: false });
+  applyQuality(pref === "auto" ? (store.get("nivel0-auto") || "mid") : pref, false);
+}
+/** Modo automático: mede o FPS em janelas de 3 s e ajusta a qualidade (no máximo 4 ajustes). */
+function autoTune(dt) {
+  if (qualityPref !== "auto" || tune.windows >= 4) return;
+  tune.frames++; tune.time += dt;
+  if (tune.time < 3) return;
+  const fps = tune.frames / tune.time;
+  tune.frames = 0; tune.time = 0; tune.windows++;
+  const i = ORDER.indexOf(quality);
+  if (fps < 45 && i > 0) { tune.steppedDown = true; applyQuality(ORDER[i - 1], true); store.set("nivel0-auto", quality); }
+  else if (fps > 58 && i < ORDER.length - 1 && !tune.steppedDown) { applyQuality(ORDER[i + 1], true); store.set("nivel0-auto", quality); }
+}
+
+// ------------------------------------------------------------------ Texturas desenhadas no canvas
+function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+function tex(draw, size = 256) {
+  const c = document.createElement("canvas");
+  c.width = c.height = size;
+  draw(c.getContext("2d"), size);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+function speckle(g, n, color, size, r) {
+  g.fillStyle = color;
+  for (let i = 0; i < n; i++) g.fillRect(r() * size, r() * size, 1 + r() * 2, 1 + r() * 2);
+}
+function wallTexture(L, r) {
+  return tex((g, n) => {
+    g.fillStyle = L.wall; g.fillRect(0, 0, n, n);
+    g.fillStyle = L.stripe;
+    for (let x = 0; x < n; x += 16) g.fillRect(x, 0, 5, n);
+    // motivo do papel de parede
+    g.globalAlpha = .18;
+    for (let y = 8; y < n; y += 24) for (let x = 8; x < n; x += 16) { g.fillRect(x, y, 3, 6); }
+    g.globalAlpha = 1;
+    speckle(g, 900, "rgba(0,0,0,.12)", n, r);
+    // manchas de umidade perto do chão
+    for (let i = 0; i < 5; i++) {
+      const x = r() * n, rad = 30 + r() * 60;
+      const gr = g.createRadialGradient(x, n, 0, x, n, rad);
+      gr.addColorStop(0, "rgba(60,45,10,.45)"); gr.addColorStop(1, "rgba(60,45,10,0)");
+      g.fillStyle = gr; g.fillRect(x - rad, n - rad, rad * 2, rad);
+    }
+    g.fillStyle = "rgba(40,30,10,.5)"; g.fillRect(0, n - 10, n, 10); // rodapé
+  });
+}
+function carpetTexture(L, r) {
+  return tex((g, n) => {
+    g.fillStyle = L.carpet; g.fillRect(0, 0, n, n);
+    speckle(g, 5000, "rgba(0,0,0,.18)", n, r);
+    speckle(g, 2500, "rgba(255,240,180,.08)", n, r);
+    for (let i = 0; i < 3; i++) {
+      const x = r() * n, y = r() * n, rad = 20 + r() * 50;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, "rgba(20,15,5,.35)"); gr.addColorStop(1, "rgba(20,15,5,0)");
+      g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
+  });
+}
+function ceilingTexture(L, r) {
+  return tex((g, n) => {
+    g.fillStyle = L.ceil; g.fillRect(0, 0, n, n);
+    speckle(g, 1500, "rgba(0,0,0,.1)", n, r);
+    g.strokeStyle = "rgba(0,0,0,.35)"; g.lineWidth = 3;
+    for (let i = 0; i <= 2; i++) { const p = i * n / 2; g.beginPath(); g.moveTo(p, 0); g.lineTo(p, n); g.stroke(); g.beginPath(); g.moveTo(0, p); g.lineTo(n, p); g.stroke(); }
+  });
+}
+const exitTexture = tex((g, n) => {
+  g.fillStyle = "#1a0000"; g.fillRect(0, 0, n, n);
+  g.fillStyle = "#ff2a1a"; g.font = "bold 92px 'Courier New', monospace"; g.textAlign = "center"; g.textBaseline = "middle";
+  g.shadowColor = "#ff2a1a"; g.shadowBlur = 18;
+  g.fillText("SAÍDA", n / 2, n / 2 + 4);
+}, 256);
+
+// ------------------------------------------------------------------ Geração do labirinto
+function generate(levelIndex, seed) {
+  const r = rng(seed);
+  const size = Math.min(19 + levelIndex * 6, 47) | 1;
+  const W = size, D = size;
+  const grid = new Uint8Array(W * D).fill(1);
+  const at = (x, z) => grid[z * W + x];
+  const set = (x, z, v) => { grid[z * W + x] = v; };
+
+  // labirinto por busca em profundidade
+  const stack = [[1, 1]];
+  set(1, 1, 0);
+  while (stack.length) {
+    const [x, z] = stack[stack.length - 1];
+    const dirs = [[2, 0], [-2, 0], [0, 2], [0, -2]].filter(([dx, dz]) => {
+      const nx = x + dx, nz = z + dz;
+      return nx > 0 && nz > 0 && nx < W - 1 && nz < D - 1 && at(nx, nz) === 1;
+    });
+    if (!dirs.length) { stack.pop(); continue; }
+    const [dx, dz] = dirs[Math.floor(r() * dirs.length)];
+    set(x + dx / 2, z + dz / 2, 0); set(x + dx, z + dz, 0);
+    stack.push([x + dx, z + dz]);
+  }
+  // abre paredes para criar laços e salões (os Backrooms são abertos e repetitivos)
+  const openness = Math.max(0.2, 0.5 - levelIndex * 0.07);
+  for (let z = 1; z < D - 1; z++) for (let x = 1; x < W - 1; x++) {
+    if (at(x, z) === 1 && r() < openness) {
+      const h = at(x - 1, z) === 0 && at(x + 1, z) === 0;
+      const v = at(x, z - 1) === 0 && at(x, z + 1) === 0;
+      if (h || v) set(x, z, 0);
+    }
+  }
+  const rooms = 3 + Math.floor(r() * 4);
+  for (let i = 0; i < rooms; i++) {
+    const rw = 2 + Math.floor(r() * 4), rd = 2 + Math.floor(r() * 4);
+    const rx = 1 + Math.floor(r() * (W - rw - 2)), rz = 1 + Math.floor(r() * (D - rd - 2));
+    for (let z = rz; z < rz + rd; z++) for (let x = rx; x < rx + rw; x++) {
+      // pilares soltos só no miolo da sala, para nunca fechar um corredor que chega pela borda
+      const inner = x > rx && x < rx + rw - 1 && z > rz && z < rz + rd - 1;
+      set(x, z, inner && (x - rx) % 3 === 2 && (z - rz) % 3 === 2 && r() < 0.6 ? 1 : 0);
+    }
+  }
+  return { W, D, grid, at };
+}
+
+function bfs(map, sx, sz) {
+  const dist = new Int32Array(map.W * map.D).fill(-1);
+  const q = new Int32Array(map.W * map.D);
+  let h = 0, t = 0;
+  dist[sz * map.W + sx] = 0; q[t++] = sz * map.W + sx;
+  while (h < t) {
+    const c = q[h++], x = c % map.W, z = (c / map.W) | 0;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (nx < 0 || nz < 0 || nx >= map.W || nz >= map.D) continue;
+      const ni = nz * map.W + nx;
+      if (map.grid[ni] === 0 && dist[ni] < 0) { dist[ni] = dist[c] + 1; q[t++] = ni; }
+    }
+  }
+  return dist;
+}
+
+// ------------------------------------------------------------------ Mundo
+let world = null; // { map, group, panels, exit, bottles, entities }
+
+function buildWorld(levelIndex) {
+  if (world) {
+    scene.remove(world.group);
+    world.group.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { if (m.map) m.map.dispose(); m.dispose(); }); } });
+  }
+  const L = level(levelIndex);
+  const seed = (Date.now() ^ (levelIndex * 7919)) >>> 0;
+  const r = rng(seed);
+  const map = generate(levelIndex, seed);
+  const group = new THREE.Group();
+  scene.add(group);
+
+  const fogFar = 24 - Math.min(levelIndex, 3) * 3;
+  scene.fog = new THREE.Fog(L.fog, 2, fogFar * QUALITY[quality].fog);
+  scene.background = new THREE.Color(L.fog);
+  ambient.intensity = L.amb;
+
+  // paredes
+  const wallMat = new THREE.MeshLambertMaterial({ map: wallTexture(L, r) });
+  const wallGeo = new THREE.BoxGeometry(S, H, S);
+  let count = 0;
+  for (let i = 0; i < map.grid.length; i++) if (map.grid[i]) count++;
+  const walls = new THREE.InstancedMesh(wallGeo, wallMat, count);
+  const m = new THREE.Matrix4();
+  let k = 0;
+  for (let z = 0; z < map.D; z++) for (let x = 0; x < map.W; x++) {
+    if (map.at(x, z)) { m.makeTranslation(x * S, H / 2, z * S); walls.setMatrixAt(k++, m); }
+  }
+  walls.instanceMatrix.needsUpdate = true;
+  group.add(walls);
+
+  // chão e teto
+  const floorTex = carpetTexture(L, r);
+  floorTex.repeat.set(map.W * 1.2, map.D * 1.2);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(map.W * S, map.D * S), new THREE.MeshLambertMaterial({ map: floorTex }));
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.set((map.W - 1) * S / 2, 0, (map.D - 1) * S / 2);
+  group.add(floor);
+  const ceilTex = ceilingTexture(L, r);
+  ceilTex.repeat.set(map.W * 2, map.D * 2);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(map.W * S, map.D * S), new THREE.MeshLambertMaterial({ map: ceilTex }));
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.set((map.W - 1) * S / 2, H, (map.D - 1) * S / 2);
+  group.add(ceil);
+
+  // lâmpadas fluorescentes (planos que brilham; as luzes de verdade vêm do grupo que segue o jogador)
+  const panels = [];
+  const panelOn = new THREE.MeshBasicMaterial({ color: 0xfffbe6 });
+  const panelOff = new THREE.MeshBasicMaterial({ color: 0x3a3a30 });
+  const panelGeo = new THREE.PlaneGeometry(1.1, 2.2);
+  for (let z = 1; z < map.D - 1; z++) for (let x = 1; x < map.W - 1; x++) {
+    if (map.at(x, z) === 0 && r() < L.panels) {
+      const broken = r() < L.broken;
+      const p = new THREE.Mesh(panelGeo, broken ? panelOff.clone() : panelOn.clone());
+      p.rotation.x = Math.PI / 2;
+      p.position.set(x * S, H - 0.01, z * S);
+      group.add(p);
+      panels.push({ mesh: p, x: x * S, z: z * S, broken, flicker: broken && r() < 0.6, phase: r() * 10 });
+    }
+  }
+
+  // início, saída (a célula mais distante) e garrafas
+  const start = { x: 1, z: 1 };
+  const dist = bfs(map, start.x, start.z);
+  let far = 0, exitCell = start;
+  for (let i = 0; i < dist.length; i++) if (dist[i] > far) { far = dist[i]; exitCell = { x: i % map.W, z: (i / map.W) | 0 }; }
+  const exit = new THREE.Group();
+  const door = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 2.4), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+  door.position.y = 1.2;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.45), new THREE.MeshBasicMaterial({ map: exitTexture, fog: false }));
+  sign.position.y = 2.75;
+  exit.add(door, sign);
+  exit.position.set(exitCell.x * S, 0, exitCell.z * S);
+  // vira a porta para o corredor aberto vizinho
+  for (const [dx, dz, ang] of [[0, 1, 0], [0, -1, Math.PI], [1, 0, Math.PI / 2], [-1, 0, -Math.PI / 2]]) {
+    if (map.at(exitCell.x + dx, exitCell.z + dz) === 0) { exit.rotation.y = ang; break; }
+  }
+  group.add(exit);
+  const exitLight = new THREE.PointLight(0xff2010, 1.2, 9, 1.5);
+  exitLight.position.set(exitCell.x * S, 2.6, exitCell.z * S);
+  group.add(exitLight);
+
+  const bottles = [];
+  const bottleGeo = new THREE.CylinderGeometry(0.09, 0.09, 0.34, 10);
+  const capGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.08, 8);
+  const open = [];
+  for (let i = 0; i < dist.length; i++) if (dist[i] > 4) open.push(i);
+  const nBottles = 5 + levelIndex;
+  for (let i = 0; i < nBottles && open.length; i++) {
+    const c = open.splice(Math.floor(r() * open.length), 1)[0];
+    const b = new THREE.Group();
+    b.add(new THREE.Mesh(bottleGeo, new THREE.MeshBasicMaterial({ color: 0xf3ead2, transparent: true, opacity: .85 })));
+    const cap = new THREE.Mesh(capGeo, new THREE.MeshBasicMaterial({ color: 0x3aa0ff }));
+    cap.position.y = 0.21; b.add(cap);
+    b.position.set((c % map.W) * S + (r() - .5) * 2, 0.2, ((c / map.W) | 0) * S + (r() - .5) * 2);
+    group.add(b);
+    bottles.push(b);
+  }
+
+  // criaturas: começam longe do jogador
+  const entities = [];
+  const nEnt = levelIndex === 0 ? 1 : Math.min(1 + Math.floor(levelIndex / 1.5), 4);
+  const farCells = [];
+  for (let i = 0; i < dist.length; i++) if (dist[i] > far * 0.55) farCells.push(i);
+  for (let i = 0; i < nEnt; i++) {
+    const c = farCells[Math.floor(r() * farCells.length)];
+    entities.push(makeEntity(group, (c % map.W) * S, ((c / map.W) | 0) * S, levelIndex));
+  }
+
+  world = { map, group, panels, exit, exitCell, bottles, entities, L, dist: null, distAt: 0, fogFar };
+  player.x = start.x * S; player.z = start.z * S;
+  // olha para o primeiro corredor aberto
+  player.yaw = map.at(2, 1) === 0 ? -Math.PI / 2 : Math.PI;
+  player.pitch = 0;
+}
+
+function makeEntity(group, x, z, levelIndex) {
+  const g = new THREE.Group();
+  const black = new THREE.MeshBasicMaterial({ color: 0x050403 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.42, 2.3, 7), black);
+  body.position.y = 1.15;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 8, 6), black);
+  head.position.y = 2.5; head.scale.set(1, 1.35, 1);
+  const armGeo = new THREE.CylinderGeometry(0.05, 0.03, 1.9, 5);
+  const armL = new THREE.Mesh(armGeo, black); armL.position.set(-0.32, 1.45, 0); armL.rotation.z = 0.12;
+  const armR = new THREE.Mesh(armGeo, black); armR.position.set(0.32, 1.45, 0); armR.rotation.z = -0.12;
+  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xfff6d8, fog: false });
+  const eyeGeo = new THREE.SphereGeometry(0.035, 6, 4);
+  const e1 = new THREE.Mesh(eyeGeo, eyeMat); e1.position.set(-0.09, 2.56, -0.22);
+  const e2 = new THREE.Mesh(eyeGeo, eyeMat); e2.position.set(0.09, 2.56, -0.22);
+  g.add(body, head, armL, armR, e1, e2);
+  g.position.set(x, 0, z);
+  group.add(g);
+  return { mesh: g, x, z, dir: Math.random() * Math.PI * 2, chase: 0, speed: 2.1 + levelIndex * 0.35, chaseSpeed: 4.3 + levelIndex * 0.45, heading: null };
+}
+
+// ------------------------------------------------------------------ Jogador e entrada
+const player = { x: 0, z: 0, yaw: 0, pitch: 0, sanity: 100, stamina: 100, battery: 100, light: false, bob: 0, step: 0 };
+const keys = {};
+let running = false;
+let state = "title";
+let levelIndex = 0;
+let elapsed = 0;
+let collected = 0;
+
+addEventListener("keydown", (e) => {
+  keys[e.code] = true;
+  if (state === "play" && /^(Arrow|Space)/.test(e.code)) e.preventDefault();
+  if (e.code === "KeyF" && state === "play" && !e.repeat) toggleLight();
+  if (e.code === "KeyP" && !e.repeat) fpsEl.hidden = !fpsEl.hidden;
+  if (e.code === "F11" && window.nivelZeroDesktop) { e.preventDefault(); window.nivelZeroDesktop.toggleFullscreen(); }
+});
+addEventListener("keyup", (e) => { keys[e.code] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// Entrada por Pointer Events: o mesmo código atende mouse, toque e caneta.
+const input = $("input");
+const stickEl = $("stick");
+const stickThumb = stickEl.firstElementChild;
+const stick = { id: null, ox: 0, oy: 0, x: 0, y: 0 };
+const lookers = new Map(); // pointerId -> última posição
+const STICK_MAX = 52;
+
+function stickCenter() {
+  const r = stickEl.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 };
+}
+function setStick(dx, dy) {
+  const len = Math.hypot(dx, dy);
+  if (len > STICK_MAX) { dx *= STICK_MAX / len; dy *= STICK_MAX / len; }
+  const nx = dx / STICK_MAX, ny = dy / STICK_MAX;
+  // zona morta pequena para não andar sozinho
+  stick.x = Math.abs(nx) < 0.12 ? 0 : nx;
+  stick.y = Math.abs(ny) < 0.12 ? 0 : ny;
+  stickThumb.style.transform = `translate(${dx}px,${dy}px)`;
+}
+
+input.addEventListener("pointerdown", (e) => {
+  if (state !== "play") return;
+  e.preventDefault();
+  input.focus({ preventScroll: true });
+  if (e.pointerType === "mouse") {
+    if (document.pointerLockElement !== input && input.requestPointerLock) {
+      try { const p = input.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (err) {}
+    }
+    lookers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    return;
+  }
+  try { input.setPointerCapture(e.pointerId); } catch (err) {}
+  const c = stickCenter();
+  const nearStick = Math.hypot(e.clientX - c.x, e.clientY - c.y) < c.r * 1.8 || e.clientX < innerWidth * 0.4 && e.clientY > innerHeight * 0.45;
+  if (stick.id === null && nearStick) {
+    stick.id = e.pointerId;
+    // se tocou dentro do círculo, o centro é o do círculo; se tocou perto, o centro é o próprio toque
+    const inside = Math.hypot(e.clientX - c.x, e.clientY - c.y) < c.r;
+    stick.ox = inside ? c.x : e.clientX; stick.oy = inside ? c.y : e.clientY;
+    stickEl.classList.add("active");
+    setStick(e.clientX - stick.ox, e.clientY - stick.oy);
+  } else {
+    lookers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    $("lookhint").style.opacity = 0;
+  }
+});
+input.addEventListener("pointermove", (e) => {
+  if (state !== "play") return;
+  if (e.pointerType === "mouse") {
+    if (document.pointerLockElement === input) look(e.movementX, e.movementY, 0.0022);
+    else if (lookers.has(e.pointerId)) {
+      const l = lookers.get(e.pointerId);
+      look(e.clientX - l.x, e.clientY - l.y, 0.004);
+      lookers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    return;
+  }
+  if (e.pointerId === stick.id) setStick(e.clientX - stick.ox, e.clientY - stick.oy);
+  else if (lookers.has(e.pointerId)) {
+    const l = lookers.get(e.pointerId);
+    look(e.clientX - l.x, e.clientY - l.y, 0.0055);
+    lookers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+});
+const release = (e) => {
+  if (e.pointerId === stick.id) {
+    stick.id = null;
+    setStick(0, 0);
+    stickEl.classList.remove("active");
+  }
+  lookers.delete(e.pointerId);
+};
+input.addEventListener("pointerup", release);
+input.addEventListener("pointercancel", release);
+input.addEventListener("lostpointercapture", release);
+// pointer lock: movimento chega mesmo fora da camada
+document.addEventListener("mousemove", (e) => {
+  if (state === "play" && document.pointerLockElement === input && e.target !== input) look(e.movementX, e.movementY, 0.0022);
+});
+
+function look(dx, dy, s) {
+  player.yaw -= dx * s;
+  player.pitch = Math.max(-1.3, Math.min(1.3, player.pitch - dy * s));
+}
+
+const bRun = $("bRun");
+const bLight = $("bLight");
+bRun.addEventListener("pointerdown", (e) => {
+  e.preventDefault(); e.stopPropagation();
+  running = !running;
+  bRun.classList.toggle("on", running);
+});
+bLight.addEventListener("pointerdown", (e) => { e.preventDefault(); e.stopPropagation(); toggleLight(); });
+for (const b of [bRun, bLight]) b.addEventListener("click", (e) => e.preventDefault());
+
+function toggleLight() {
+  if (player.battery <= 1 && !player.light) { toast("A pilha acabou"); return; }
+  player.light = !player.light;
+  bLight.classList.toggle("on", player.light);
+  sfx.click();
+}
+
+// ------------------------------------------------------------------ Áudio (tudo sintetizado)
+const sfx = (() => {
+  let ac = null, master, hum, growlGain, growlOsc, beatTimer = 0;
+  const noiseBuf = () => {
+    const b = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  };
+  let nb = null;
+  function init() {
+    if (ac) { if (ac.state === "suspended") ac.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    ac = new AC();
+    master = ac.createGain(); master.gain.value = 0.9; master.connect(ac.destination);
+    nb = noiseBuf();
+    // zumbido das lâmpadas: 120 Hz serrilhado filtrado + 60 Hz
+    hum = ac.createGain(); hum.gain.value = 0.03; hum.connect(master);
+    const o1 = ac.createOscillator(); o1.type = "sawtooth"; o1.frequency.value = 120;
+    const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 520;
+    o1.connect(lp); lp.connect(hum); o1.start();
+    const o2 = ac.createOscillator(); o2.frequency.value = 60;
+    const g2 = ac.createGain(); g2.gain.value = 0.6; o2.connect(g2); g2.connect(hum); o2.start();
+    // rosnado da criatura
+    growlGain = ac.createGain(); growlGain.gain.value = 0; growlGain.connect(master);
+    growlOsc = ac.createOscillator(); growlOsc.type = "sawtooth"; growlOsc.frequency.value = 42;
+    const glp = ac.createBiquadFilter(); glp.type = "lowpass"; glp.frequency.value = 180;
+    const lfo = ac.createOscillator(); lfo.frequency.value = 7; const lfoG = ac.createGain(); lfoG.gain.value = 9;
+    lfo.connect(lfoG); lfoG.connect(growlOsc.frequency); lfo.start();
+    growlOsc.connect(glp); glp.connect(growlGain); growlOsc.start();
+  }
+  function burst(freq, dur, vol, type = "lowpass") {
+    if (!ac) return;
+    const s = ac.createBufferSource(); s.buffer = nb;
+    const f = ac.createBiquadFilter(); f.type = type; f.frequency.value = freq;
+    const g = ac.createGain(); const t = ac.currentTime;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(master);
+    s.start(t, Math.random() * 0.5); s.stop(t + dur + 0.05);
+  }
+  function tone(freq, dur, vol, type = "sine", slide = 0) {
+    if (!ac) return;
+    const o = ac.createOscillator(); o.type = type; o.frequency.value = freq;
+    const g = ac.createGain(); const t = ac.currentTime;
+    if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(20, freq + slide), t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.05);
+  }
+  return {
+    init,
+    step: (run) => burst(run ? 420 : 300, 0.12, run ? 0.32 : 0.2),
+    click: () => burst(2500, 0.03, 0.15, "highpass"),
+    pickup: () => { tone(660, 0.15, 0.15); setTimeout(() => tone(990, 0.2, 0.12), 90); },
+    descend: () => tone(220, 1.8, 0.25, "sine", -170),
+    scream: () => { burst(1400, 1.4, 0.7, "bandpass"); tone(300, 1.2, 0.3, "sawtooth", -220); },
+    flick: () => burst(3200, 0.05, 0.05, "highpass"),
+    update(dt, fear, humLevel) {
+      if (!ac) return;
+      growlGain.gain.setTargetAtTime(fear * 0.22, ac.currentTime, 0.2);
+      hum.gain.setTargetAtTime(0.03 * humLevel, ac.currentTime, 0.1);
+      if (fear > 0.15) {
+        beatTimer -= dt;
+        if (beatTimer <= 0) { tone(55, 0.12, 0.35 * fear); setTimeout(() => tone(48, 0.14, 0.3 * fear), 140); beatTimer = 1.1 - fear * 0.6; }
+      }
+    },
+    silence() { if (ac) { growlGain.gain.value = 0; } },
+  };
+})();
+
+// ------------------------------------------------------------------ Física e IA
+function solid(x, z) {
+  const map = world.map;
+  const cx = Math.round(x / S), cz = Math.round(z / S);
+  if (cx < 0 || cz < 0 || cx >= map.W || cz >= map.D) return true;
+  return map.at(cx, cz) === 1;
+}
+function blocked(x, z, r) {
+  // o jogador é um círculo; testa os quatro cantos da sua caixa
+  return solid(x - r, z - r) || solid(x + r, z - r) || solid(x - r, z + r) || solid(x + r, z + r);
+}
+function lineOfSight(ax, az, bx, bz) {
+  const d = Math.hypot(bx - ax, bz - az), steps = Math.ceil(d / (S / 4));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (solid(ax + (bx - ax) * t, az + (bz - az) * t)) return false;
+  }
+  return true;
+}
+
+function updateEntities(dt) {
+  let fear = 0;
+  const map = world.map;
+  const pc = { x: Math.round(player.x / S), z: Math.round(player.z / S) };
+  // campo de distância até o jogador, recalculado algumas vezes por segundo
+  world.distAt -= dt;
+  if (world.distAt <= 0 || !world.dist) { world.dist = bfs(map, pc.x, pc.z); world.distAt = 0.3; }
+  const noisy = (running || keys.ShiftLeft || keys.ShiftRight) && player.moving;
+
+  for (const e of world.entities) {
+    const d = Math.hypot(player.x - e.x, player.z - e.z);
+    const sees = d < 15 * S / 4 * 1.2 && lineOfSight(e.x, e.z, player.x, player.z);
+    const hears = noisy && d < 7 * S / 4 * 2;
+    if (sees || hears) e.chase = 6;
+    else e.chase = Math.max(0, e.chase - dt);
+
+    let tx, tz;
+    if (e.chase > 0) {
+      if (sees && d < S) { tx = player.x; tz = player.z; }
+      else {
+        // desce o gradiente do campo de distância
+        const ex = Math.round(e.x / S), ez = Math.round(e.z / S);
+        let best = world.dist[ez * map.W + ex], bx = ex, bz = ez;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const v = world.dist[(ez + dz) * map.W + ex + dx];
+          if (v >= 0 && (best < 0 || v < best)) { best = v; bx = ex + dx; bz = ez + dz; }
+        }
+        tx = bx * S; tz = bz * S;
+        if (bx === ex && bz === ez) { tx = player.x; tz = player.z; }
+      }
+    } else {
+      // vaga pelos corredores
+      if (!e.heading || Math.hypot(e.heading.x - e.x, e.heading.z - e.z) < 0.3) {
+        const ex = Math.round(e.x / S), ez = Math.round(e.z / S);
+        const opts = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([dx, dz]) => map.at(ex + dx, ez + dz) === 0);
+        const [dx, dz] = opts.length ? opts[Math.floor(Math.random() * opts.length)] : [0, 0];
+        e.heading = { x: (ex + dx) * S, z: (ez + dz) * S };
+      }
+      tx = e.heading.x; tz = e.heading.z;
+    }
+    const sp = (e.chase > 0 ? e.chaseSpeed : e.speed) * dt;
+    const ang = Math.atan2(tx - e.x, tz - e.z);
+    const nx = e.x + Math.sin(ang) * sp, nz = e.z + Math.cos(ang) * sp;
+    if (!blocked(nx, e.z, 0.3)) e.x = nx;
+    if (!blocked(e.x, nz, 0.3)) e.z = nz;
+    e.mesh.position.set(e.x + (Math.random() - .5) * 0.04, 0, e.z + (Math.random() - .5) * 0.04);
+    e.mesh.rotation.y = Math.atan2(player.x - e.x, player.z - e.z) + Math.PI;
+
+    if (d < 0.9) return die("caught");
+    const f = Math.max(0, 1 - d / 22) * (e.chase > 0 ? 1 : 0.4);
+    fear = Math.max(fear, f);
+  }
+  return fear;
+}
+
+// ------------------------------------------------------------------ Loop
+let last = performance.now();
+let lightTimer = 0;
+let noiseTimer = 0;
+
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  if (state === "play") { update(dt); autoTune(dt); }
+  else if (world) camera.rotation.y += dt * 0.05;
+  fpsMeter(dt);
+  drawNoise(dt);
+  renderer.render(scene, camera);
+}
+
+function update(dt) {
+  elapsed += dt;
+  // movimento
+  let mx = 0, mz = 0;
+  if (keys.KeyW || keys.ArrowUp) mz -= 1;
+  if (keys.KeyS || keys.ArrowDown) mz += 1;
+  if (keys.KeyA || keys.ArrowLeft) mx -= 1;
+  if (keys.KeyD || keys.ArrowRight) mx += 1;
+  mx += stick.x; mz += stick.y;
+  const len = Math.hypot(mx, mz);
+  if (len > 1) { mx /= len; mz /= len; }
+  player.moving = len > 0.1;
+  const wantsRun = (running || keys.ShiftLeft || keys.ShiftRight) && player.moving && player.stamina > 2;
+  const speed = wantsRun ? 5.6 : 2.9;
+  if (wantsRun) player.stamina = Math.max(0, player.stamina - dt * 22);
+  else player.stamina = Math.min(100, player.stamina + dt * (player.moving ? 9 : 16));
+  if (player.stamina <= 2 && running) { running = false; bRun.classList.remove("on"); }
+
+  const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
+  const vx = (mx * cos + mz * sin) * speed * dt;
+  const vz = (-mx * sin + mz * cos) * speed * dt;
+  if (!blocked(player.x + vx, player.z, R)) player.x += vx;
+  if (!blocked(player.x, player.z + vz, R)) player.z += vz;
+
+  if (player.moving) {
+    player.bob += dt * (wantsRun ? 13 : 8);
+    player.step += Math.hypot(vx, vz);
+    if (player.step > (wantsRun ? 2.1 : 1.6)) { player.step = 0; sfx.step(wantsRun); }
+  }
+  camera.position.set(player.x, EYE + Math.sin(player.bob) * (wantsRun ? 0.07 : 0.035), player.z);
+  camera.rotation.set(player.pitch, player.yaw, Math.sin(player.bob * 0.5) * 0.008);
+
+  // lanterna
+  if (player.light) {
+    player.battery = Math.max(0, player.battery - dt * 2.2);
+    if (player.battery <= 0) { player.light = false; bLight.classList.remove("on"); toast("A pilha acabou"); }
+  } else player.battery = Math.min(100, player.battery + dt * 0.8);
+  const lowBattery = player.battery < 15 && Math.random() < 0.08;
+  flashlight.intensity = player.light && !lowBattery ? 1.6 : 0;
+
+  // lâmpadas: as mais próximas recebem as luzes do grupo
+  lightTimer -= dt;
+  if (lightTimer <= 0) {
+    lightTimer = 0.25;
+    const near = world.panels.filter((p) => !p.broken || p.flicker)
+      .map((p) => ({ p, d: (p.x - player.x) ** 2 + (p.z - player.z) ** 2 }))
+      .sort((a, b) => a.d - b.d).slice(0, QUALITY[quality].lights);
+    lightPool.forEach((l, i) => {
+      const n = near[i];
+      l.userData.panel = n ? n.p : null;
+      if (n) l.position.set(n.p.x, H - 0.3, n.p.z);
+    });
+  }
+  const t = elapsed;
+  let humLevel = 1;
+  for (const l of lightPool) {
+    const p = l.userData.panel;
+    if (!p) { l.intensity = 0; continue; }
+    let on = !p.broken;
+    if (p.flicker) on = Math.sin(t * 13 + p.phase) + Math.sin(t * 3.7 + p.phase * 2) > 0.9;
+    l.intensity = on ? 0.9 : 0;
+  }
+  for (const p of world.panels) {
+    if (!p.flicker) continue;
+    const on = Math.sin(t * 13 + p.phase) + Math.sin(t * 3.7 + p.phase * 2) > 0.9;
+    p.mesh.material.color.setHex(on ? 0xfffbe6 : 0x3a3a30);
+    if (on !== p.wasOn && Math.hypot(p.x - player.x, p.z - player.z) < 10) sfx.flick();
+    p.wasOn = on;
+  }
+
+  // garrafas
+  for (const b of world.bottles) {
+    if (!b.visible) continue;
+    b.rotation.y += dt * 1.5;
+    b.position.y = 0.25 + Math.sin(t * 2 + b.position.x) * 0.05;
+    if (Math.hypot(b.position.x - player.x, b.position.z - player.z) < 0.9) {
+      b.visible = false;
+      collected++;
+      player.sanity = Math.min(100, player.sanity + 35);
+      sfx.pickup();
+      toast("Água de amêndoa. Sanidade +35");
+    }
+  }
+
+  // criaturas e medo
+  const fear = updateEntities(dt);
+  if (state !== "play") return;
+
+  // sanidade cai sempre, mais rápido no escuro e com a criatura perto
+  const darkness = 1 - Math.min(1, world.L.amb + (player.light ? 0.5 : 0));
+  player.sanity -= dt * (0.32 + levelIndex * 0.12 + darkness * 0.35 + fear * 2.2);
+  if (player.sanity <= 0) return die("lost");
+
+  // saída
+  const ex = world.exitCell.x * S, ez = world.exitCell.z * S;
+  if (Math.hypot(ex - player.x, ez - player.z) < 1.3) return descend();
+
+  // efeitos e HUD
+  $("fear").style.opacity = Math.max(fear, player.sanity < 25 ? (25 - player.sanity) / 30 : 0).toFixed(2);
+  if (QUALITY[quality].blur) renderer.domElement.style.filter = player.sanity < 30 ? `blur(${((30 - player.sanity) / 30 * 1.2).toFixed(2)}px) saturate(${(0.6 + player.sanity / 75).toFixed(2)})` : "";
+  sfx.update(dt, fear, humLevel);
+  hud();
+}
+
+const fpsEl = $("fps");
+let fpsAcc = 0, fpsN = 0;
+function fpsMeter(dt) {
+  if (fpsEl.hidden) return;
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc >= 0.5) { fpsEl.textContent = Math.round(fpsN / fpsAcc) + " FPS · " + QUALITY[quality].label; fpsAcc = 0; fpsN = 0; }
+}
+
+function hud() {
+  const s = Math.floor(elapsed);
+  $("clock").textContent = [s / 3600, (s % 3600) / 60, s % 60].map((v) => String(Math.floor(v)).padStart(2, "0")).join(":");
+  setBar("sanBar", player.sanity);
+  setBar("staBar", player.stamina);
+  setBar("batBar", player.battery);
+  const left = world.bottles.filter((b) => b.visible).length;
+  $("bottles").textContent = "ÁGUA " + left;
+}
+function setBar(id, v) {
+  const el = $(id);
+  el.firstElementChild.style.width = `calc(${Math.max(0, v)}% - 2px)`;
+  el.classList.toggle("low", v < 25);
+}
+let toastTimer = 0;
+function toast(text) {
+  const el = $("toast");
+  el.textContent = text;
+  el.style.opacity = 1;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.style.opacity = 0; }, 2200);
+}
+
+function drawNoise(dt) {
+  const every = QUALITY[quality].noise;
+  if (!every) return;
+  noiseTimer -= dt;
+  if (noiseTimer > 0) return;
+  noiseTimer = every;
+  const w = noise.width, h = noise.height;
+  if (!w || !h) return;
+  const img = nctx.createImageData(w, h);
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) { const v = Math.random() * 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+  nctx.putImageData(img, 0, 0);
+  const fear = parseFloat($("fear").style.opacity || 0);
+  noise.style.opacity = (0.06 + fear * 0.18).toFixed(2);
+}
+
+// ------------------------------------------------------------------ Estados
+function show(id) {
+  for (const s of ["title", "between", "dead"]) $(s).hidden = s !== id;
+  const playing = id === null;
+  $("hud").hidden = !playing;
+  input.hidden = !playing;
+  $("touch").hidden = !(playing && isTouch);
+}
+
+function startLevel(n) {
+  levelIndex = n;
+  buildWorld(n);
+  const L = level(n);
+  $("levelName").textContent = L.name;
+  player.stamina = 100;
+  lightTimer = 0;
+  state = "play";
+  show(null);
+  for (const k in keys) keys[k] = false;
+  stick.id = null; setStick(0, 0); lookers.clear();
+  input.focus({ preventScroll: true });
+  toast(L.name + " · " + L.sub + (n === 0 ? " — ache a placa vermelha SAÍDA" : ""));
+  last = performance.now();
+  try { if (navigator.wakeLock) navigator.wakeLock.request("screen").catch(() => {}); } catch (e) {}
+}
+
+function newRun() {
+  player.sanity = 100; player.battery = 100; player.light = false;
+  bLight.classList.remove("on");
+  elapsed = 0; collected = 0;
+  renderer.domElement.style.filter = "";
+  sfx.init();
+  startLevel(0);
+}
+
+function descend() {
+  state = "between";
+  sfx.silence();
+  sfx.descend();
+  const reached = levelIndex + 1;
+  if (reached > +(store.get("nivel0-best") || 0)) store.set("nivel0-best", reached);
+  if (document.exitPointerLock) document.exitPointerLock();
+  const L = level(reached);
+  $("betweenTitle").textContent = L.name;
+  $("betweenText").textContent = L.sub + ". " + L.text;
+  show("between");
+}
+
+function die(reason) {
+  if (state !== "play") return;
+  state = "dead";
+  sfx.silence();
+  sfx.scream();
+  if (document.exitPointerLock) document.exitPointerLock();
+  $("fear").style.opacity = 1;
+  $("deadTitle").textContent = reason === "caught" ? "FITA ENCERRADA" : "VOCÊ SE PERDEU";
+  $("deadText").textContent = (reason === "caught"
+    ? "Aquilo te alcançou no " : "Sua sanidade acabou no ") + level(levelIndex).name.toLowerCase() +
+    ". Tempo de gravação: " + $("clock").textContent + ". Garrafas encontradas: " + collected + ".";
+  show("dead");
+  showBest();
+}
+
+$("start").addEventListener("click", newRun);
+for (const b of document.querySelectorAll("#quality button")) b.addEventListener("click", () => setQualityPref(b.dataset.q));
+// Versão para PC (Electron): mostra o botão SAIR
+if (window.nivelZeroDesktop) { $("quit").hidden = false; $("quit").addEventListener("click", () => window.nivelZeroDesktop.quit()); }
+$("again").addEventListener("click", () => { $("fear").style.opacity = 0; newRun(); });
+$("next").addEventListener("click", () => { sfx.init(); startLevel(levelIndex + 1); });
+
+// cenário de fundo na tela inicial
+resize();
+buildWorld(0);
+setQualityPref(store.get("nivel0-quality") || "auto");
+camera.position.set(world.map.W * S / 2, EYE, world.map.D * S / 2);
+for (let i = 0; i < lightPool.length; i++) {
+  const p = world.panels[i];
+  if (p) { lightPool[i].position.set(p.x, H - 0.3, p.z); lightPool[i].intensity = 0.9; }
+}
+const startCellX = Math.round(camera.position.x / S), startCellZ = Math.round(camera.position.z / S);
+if (world.map.at(startCellX, startCellZ)) camera.position.set(S, EYE, S);
+requestAnimationFrame(frame);
+})();
+</script>

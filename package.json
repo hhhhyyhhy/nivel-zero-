@@ -1,0 +1,32 @@
+{
+  "name": "nivel-zero",
+  "productName": "Nivel Zero",
+  "version": "1.0.0",
+  "description": "Jogo de terror dos Backrooms",
+  "main": "app/main.js",
+  "author": "Nivel Zero",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "html": "node tools/build-html.js",
+    "start": "npm run html && electron .",
+    "dist": "npm run html && electron-builder --win portable --arm64 --x64"
+  },
+  "build": {
+    "appId": "com.nivelzero.jogo",
+    "productName": "Nivel Zero",
+    "files": ["app/**/*", "package.json"],
+    "win": {
+      "artifactName": "NivelZero-${arch}.exe",
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "NivelZero-${arch}.exe"
+    },
+    "compression": "normal"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8"
+  }
+}
