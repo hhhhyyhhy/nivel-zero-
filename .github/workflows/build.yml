@@ -1,0 +1,38 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Gerar executáveis
+        run: |
+          npm ci || npm install
+          npm run dist
+          ls -la dist/*.exe
+      - name: Publicar na Release "latest"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Nível Zero (última versão)
+          body: |
+            **Galaxy Book Go e outros Windows ARM:** baixe `NivelZero-arm64.exe`.
+            **PCs Intel/AMD:** baixe `NivelZero-x64.exe`.
+
+            Portátil: é só abrir. Se o Windows mostrar "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**.
+            Na tela inicial, use qualidade **Auto** ou **Baixa** em notebooks com GPU fraca. Tecla P mostra o FPS.
+          files: |
+            dist/NivelZero-arm64.exe
+            dist/NivelZero-x64.exe
+          make_latest: true
