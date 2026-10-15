@@ -10,7 +10,7 @@
   "scripts": {
     "html": "node tools/build-html.js",
     "start": "npm run html && electron .",
-    "dist": "npm run html && electron-builder --win portable --arm64 --x64"
+    "dist": "npm run html && electron-builder --win portable --arm64 && electron-builder --win portable --x64"
   },
   "build": {
     "appId": "com.nivelzero.jogo",
